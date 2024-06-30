@@ -1,0 +1,6 @@
+/bin/bash: line 1: unalias: alias: not found
+/bin/bash: line 1: unalias: sleep: not found
+/bin/bash: line 1: unalias: 10: not found
+/bin/bash: line 1: unalias: quit: not found
+/bin/bash: line 1: unalias: alias: not found
+runner: Timeout, killing child
