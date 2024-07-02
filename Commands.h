@@ -244,6 +244,15 @@ public:
     void execute() override;
 };
 
+class UnaliasCommand: public Command{
+public:
+    explicit UnaliasCommand(const char* cmd_line);
+
+    virtual ~UnaliasCommand() = default;
+
+    void execute() override;
+};
+
 
 class SmallShell {
 private:
@@ -268,6 +277,7 @@ public:
     time_t current_duration;
 
     std::unordered_map<std::string, std::string> aliases; // Alias map
+    std::vector<std::string> alias_order; // Vector to store the order of aliases
 
     Command *CreateCommand(const char *cmd_line, bool is_alarm);
 

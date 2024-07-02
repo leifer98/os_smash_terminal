@@ -5,6 +5,8 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include "Commands.h"
+#include <set>
+#include <regex>
 
 using namespace std;
 
@@ -110,8 +112,10 @@ bool is_number(const std::string &s)
 bool _isBackgroundCommand(const char *cmd_line)
 {
     const string str(cmd_line);
-    // cmd_line->substr(0, cmd_line->find_first_of(" \n"));
-    return str[str.find_last_not_of(WHITESPACE)] == '&';
+    size_t last_non_whitespace = str.find_last_not_of(WHITESPACE);
+
+    // Check if the string is not empty and the last non-whitespace character is '&'
+    return (last_non_whitespace != std::string::npos) && (str[last_non_whitespace] == '&');
 }
 
 void _removeBackgroundSign(char *cmd_line)
@@ -191,17 +195,26 @@ std::string SmallShell::substituteAliases(const std::string &cmd_line)
     SmallShell &shell = SmallShell::getInstance();
     std::istringstream iss(cmd_line);
     std::string token;
-    std::string result = "";
+    std::string result;
     bool first = true;
+    bool is_background = false;
 
     while (iss >> token)
     {
+        // Check if the token contains '&' at the end
+        if (token.back() == '&')
+        {
+            is_background = true;
+            token.pop_back(); // Remove the '&' character from the token
+        }
+
         // Check if the token is an alias
         auto it = shell.aliases.find(token);
         if (it != shell.aliases.end())
         {
             token = it->second;
         }
+
         if (first)
         {
             result = token;
@@ -211,6 +224,11 @@ std::string SmallShell::substituteAliases(const std::string &cmd_line)
         {
             result += " " + token;
         }
+    }
+
+    if (is_background)
+    {
+        result += "&"; // Append the background sign if it was originally present
     }
 
     return result;
@@ -225,6 +243,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line, bool is_alarm)
 {
 
     string cmd_s = _trim(string(cmd_line)); // REMOVE WHITESPACES
+
     if (!checker(cmd_s) && _isBackgroundCommand(cmd_s.c_str()))
     {
         char cmd_line_copy[COMMAND_ARGS_MAX_LENGTH];
@@ -232,75 +251,81 @@ Command *SmallShell::CreateCommand(const char *cmd_line, bool is_alarm)
         _removeBackgroundSign(cmd_line_copy);
         cmd_s = cmd_line_copy;
     }
-
-    // Substitute aliases
-    cmd_s = substituteAliases(cmd_s);
-    strcpy(const_cast<char *>(cmd_line), cmd_s.c_str());
-
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
-
-    if (strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr)
+    if (firstWord == "unalias")
     {
-        return new RedirectionCommand(cmd_line);
-    }
-
-    if (strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&"))
-    {
-        return new PipeCommand(cmd_line);
-    }
-    last_cmd_fg = false;
-    if (firstWord == "chprompt")
-    {
-        return new ChpromptCommand(cmd_line);
-    }
-    else if (firstWord == "showpid")
-    {
-        return new ShowPidCommand(cmd_line);
-    }
-    else if (firstWord == "pwd")
-    {
-        return new GetCurrDirCommand(cmd_line);
-    }
-    else if (firstWord == "cd")
-    {
-        return new ChangeDirCommand(cmd_line, &last_directory);
-    }
-    else if (firstWord == "jobs")
-    {
-        return new JobsCommand(cmd_line);
-    }
-    else if (firstWord == "kill")
-    {
-        return new KillCommand(cmd_line);
-    }
-    else if (firstWord == "fg")
-    {
-        last_cmd_fg = true;
-        return new ForegroundCommand(cmd_line);
-    }
-    else if (firstWord == "bg")
-    {
-        return new BackgroundCommand(cmd_line);
-    }
-    else if (firstWord == "quit")
-    {
-        return new QuitCommand(cmd_line);
-    }
-    else if (firstWord == "head")
-    {
-        return new HeadCommand(cmd_line);
-    }
-    else if (firstWord == "timeout")
-    {
-        return new TimeoutCommand(cmd_line);
-    }
-    else if (firstWord == "alias")
-    {
-        return new AliasCommand(cmd_line);
+        return new UnaliasCommand(cmd_line);
     }
     else
     {
-        return new ExternalCommand(cmd_line, is_alarm);
+        // Substitute aliases
+        string substituted_cmd = substituteAliases(cmd_line);
+        strcpy(const_cast<char *>(cmd_line), substituted_cmd.c_str());
+        firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+
+        if (strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr)
+        {
+            return new RedirectionCommand(cmd_line);
+        }
+
+        if (strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&"))
+        {
+            return new PipeCommand(cmd_line);
+        }
+        last_cmd_fg = false;
+        if (firstWord == "chprompt")
+        {
+            return new ChpromptCommand(cmd_line);
+        }
+        else if (firstWord == "showpid")
+        {
+            return new ShowPidCommand(cmd_line);
+        }
+        else if (firstWord == "pwd")
+        {
+            return new GetCurrDirCommand(cmd_line);
+        }
+        else if (firstWord == "cd")
+        {
+            return new ChangeDirCommand(cmd_line, &last_directory);
+        }
+        else if (firstWord == "jobs")
+        {
+            return new JobsCommand(cmd_line);
+        }
+        else if (firstWord == "kill")
+        {
+            return new KillCommand(cmd_line);
+        }
+        else if (firstWord == "fg")
+        {
+            last_cmd_fg = true;
+            return new ForegroundCommand(cmd_line);
+        }
+        else if (firstWord == "bg")
+        {
+            return new BackgroundCommand(cmd_line);
+        }
+        else if (firstWord == "quit")
+        {
+            return new QuitCommand(cmd_line);
+        }
+        else if (firstWord == "head")
+        {
+            return new HeadCommand(cmd_line);
+        }
+        else if (firstWord == "timeout")
+        {
+            return new TimeoutCommand(cmd_line);
+        }
+        else if (firstWord == "alias")
+        {
+            return new AliasCommand(cmd_line);
+        }
+        else
+        {
+            return new ExternalCommand(cmd_line, is_alarm);
+        }
     }
 }
 
@@ -623,13 +648,11 @@ void JobsCommand::execute()
         auto job = *it;
         if (job.isStopped)
         {
-            cout << "[" << job.job_id << "] " << job.command << " : " << job.job_pid
-                 << " " << difftime(time(nullptr), job.time_created) << " secs (stopped)" << endl;
+            cout << "[" << job.job_id << "] " << job.command << endl;
         }
         else
         {
-            cout << "[" << job.job_id << "] " << job.command << " : " << job.job_pid
-                 << " " << difftime(time(nullptr), job.time_created) << " secs" << endl;
+            cout << "[" << job.job_id << "] " << job.command << endl;
         }
     }
 }
@@ -718,9 +741,6 @@ AliasCommand::AliasCommand(const char *cmd_line) : Command(cmd_line) {}
 
 void AliasCommand::execute()
 {
-    SmallShell &shell = SmallShell::getInstance();
-
-    // Parse arguments
     int num_of_args;
     char **args = init_args(this->cmd_line, &num_of_args);
     if (!args)
@@ -729,39 +749,136 @@ void AliasCommand::execute()
         return;
     }
 
+    SmallShell &shell = SmallShell::getInstance();
+
     // If no arguments, print all aliases
     if (num_of_args == 1)
     {
-        for (const auto &alias : shell.aliases)
+        for (const auto &alias : shell.alias_order)
         {
-            std::cout << alias.first << "='" << alias.second << "'" << std::endl;
+            std::cout << alias << "='" << shell.aliases[alias] << "'" << std::endl;
         }
+    }
+    else
+    {
+        // Concatenate all arguments after the first one to form the alias command
+        std::string alias_str;
+        for (int i = 1; i < num_of_args; ++i)
+        {
+            if (i > 1)
+                alias_str += " ";
+            alias_str += args[i];
+        }
+
+        size_t eq_pos = alias_str.find('=');
+        if (eq_pos == std::string::npos)
+        {
+            std::cerr << "smash error: alias: invalid alias format" << std::endl;
+            free_args(args, num_of_args);
+            return;
+        }
+
+        std::string name = alias_str.substr(0, eq_pos);
+        std::string command = alias_str.substr(eq_pos + 1);
+
+        // Validate alias name
+        if (name.empty() || !std::regex_match(name, std::regex("^[a-zA-Z0-9_]+$")))
+        {
+            std::cerr << "smash error: alias: invalid alias format" << std::endl;
+            free_args(args, num_of_args);
+            return;
+        }
+
+        // Validate alias command
+        if (!std::regex_match(command, std::regex("^'[^']*'$")))
+        {
+            std::cerr << "smash error: alias: invalid alias format" << std::endl;
+            free_args(args, num_of_args);
+            return;
+        }
+
+        // Remove leading and trailing single quotes if present
+        if (!command.empty() && command.front() == '\'' && command.back() == '\'')
+        {
+            command = command.substr(1, command.size() - 2);
+        }
+
+        // Check if the alias name conflicts with an existing alias or reserved keyword
+        std::set<std::string> reserved_keywords = {"quit", "showpid", "chprompt", "cd", "jobs",
+                                                   "kill", "fg", "bg", "head", "timeout", "alias",
+                                                   "unalias", "listdir", "watch", "getuser", "bash",
+                                                   "pwd"};
+        if (shell.aliases.find(name) != shell.aliases.end() || reserved_keywords.find(name) != reserved_keywords.end())
+        {
+            std::cerr << "smash error: alias: " << name << " already exists or is a reserved command" << std::endl;
+            free_args(args, num_of_args);
+            return;
+        }
+
+        // Remove the alias from the vector if it already exists
+        for (size_t i = 0; i < shell.alias_order.size(); ++i)
+        {
+            if (shell.alias_order[i] == name)
+            {
+                shell.alias_order.erase(shell.alias_order.begin() + i);
+                break;
+            }
+        }
+
+        // Insert at the end
+        shell.alias_order.push_back(name);
+        shell.aliases[name] = command;
+    }
+
+    free_args(args, num_of_args);
+}
+
+UnaliasCommand::UnaliasCommand(const char *cmd_line) : Command(cmd_line) {}
+
+void UnaliasCommand::execute()
+{
+    int num_of_args;
+    char **args = init_args(this->cmd_line, &num_of_args);
+    if (!args)
+    {
+        perror("smash error: malloc failed");
+        return;
+    }
+
+    SmallShell &shell = SmallShell::getInstance();
+
+    if (num_of_args < 2)
+    {
+        std::cerr << "smash error: unalias: no alias specified" << std::endl;
         free_args(args, num_of_args);
         return;
     }
 
-    // Parse alias creation
-    std::string alias_str = args[1];
-    size_t eq_pos = alias_str.find('=');
-    std::string name = alias_str.substr(0, eq_pos);
-    std::string command = alias_str.substr(eq_pos + 2);
-
-    // Concatenate all arguments after the alias name
-    for (int i = 2; i < num_of_args; ++i)
+    for (int i = 1; i < num_of_args; ++i)
     {
-        command += " ";
-        command += std::string(args[i]);
-    }
-    command.pop_back();
+        std::string name = args[i];
 
-    // Ensure the command part is properly quoted
-    if (!command.empty() && ((command.front() == '\'' && command.back() == '\'') || (command.front() == '\"' && command.back() == '\"')))
-    {
-        command = command.substr(1, command.size() - 2);
-    }
+        // Remove the alias from the map
+        auto it = shell.aliases.find(name);
+        if (it != shell.aliases.end())
+        {
+            shell.aliases.erase(it);
 
-    // Store the alias in the aliases map
-    shell.aliases[name] = command;
+            // Remove the alias from the order vector
+            for (size_t j = 0; j < shell.alias_order.size(); ++j)
+            {
+                if (shell.alias_order[j] == name)
+                {
+                    shell.alias_order.erase(shell.alias_order.begin() + j);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            std::cerr << "smash error: unalias: " << name << " not found" << std::endl;
+        }
+    }
 
     free_args(args, num_of_args);
 }
