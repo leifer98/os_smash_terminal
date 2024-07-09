@@ -1,6 +1,4 @@
-/bin/bash: line 1: unalias: alias: not found
-/bin/bash: line 1: unalias: sleep: not found
-/bin/bash: line 1: unalias: 10: not found
-/bin/bash: line 1: unalias: quit: not found
-/bin/bash: line 1: unalias: alias: not found
-runner: Timeout, killing child
+smash error: alias: h already exists or is a reserved command
+smash error: alias: pwd already exists or is a reserved command
+smash error: unalias: as alias does not exist
+smash error: External command failed: No such file or directory
